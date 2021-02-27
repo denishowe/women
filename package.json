@@ -1,0 +1,20 @@
+{
+  "name": "women",
+  "version": "1.0.0",
+  "description": "Crawl for women",
+  "main": "women.ts",
+  "scripts": {
+    "start": "nodemon --ext ts --exec \"tput reset& npm run once\"",
+    "once": "ts-node women.ts",
+    "test": "jest ."
+  },
+  "author": "Denis Howe",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node-fetch": "^2.5.8",
+    "@types/react": "^17.0.1"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.1"
+  }
+}
