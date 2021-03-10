@@ -4,8 +4,10 @@ import { parse, HTMLElement } from 'node-html-parser';
 export async function women(): Promise<void> {
   const page: HTMLElement = await fetchSomeListPage();
   cleanPage(page);
-  const names = firstFullList(page).filter(okName);
-  console.log(names.length, 'names', names.map(n => `"${n}"`));
+  const names = firstFullList(page)
+    .map(cleanElementText)
+    .filter(okName);
+  console.log(names.length, 'names', names);
 }
 
 async function fetchSomeListPage(): Promise<HTMLElement> {
@@ -21,7 +23,7 @@ async function fetchSomeListPage(): Promise<HTMLElement> {
 
 /** Return the first non-empty list resulting from applying one of the `functions` to `args` else [] */
 
-function firstFullList(page: HTMLElement): string[] {
+function firstFullList(page: HTMLElement): HTMLElement[] {
   for (let f of [listItemAnchor, tableDataAnchor]) {
     const result = f.call(0, page);
     // console.log(f.name, '-->', result.length);
@@ -74,7 +76,7 @@ function okPage(page: string): boolean { return ! badPages.has(page) }
  * https://en.wikipedia.org/wiki/List_of_Women%27s_National_Basketball_Association_season_rebounding_leaders
  */
 
-function tableDataAnchor(page: HTMLElement): string[] {
+function tableDataAnchor(page: HTMLElement): HTMLElement[] {
   return page.querySelectorAll('table').map(namesFromTable).flat();
 }
 
@@ -87,10 +89,8 @@ function tableDataAnchor(page: HTMLElement): string[] {
  * https://en.wikipedia.org/wiki/List_of_Tunisian_women_writers
  */
 
-function listItemAnchor(content: HTMLElement): string[] {
-  return content
-    .querySelectorAll('li a:first-of-type')
-    .map(cleanElementText);
+function listItemAnchor(content: HTMLElement): HTMLElement[] {
+  return content.querySelectorAll('li a:first-of-type');
 }
 
 // p <b>NAME</b> (born
@@ -142,14 +142,12 @@ function isFooter(element: HTMLElement): boolean {
   return !! element.querySelector('span#See_also, span#Notes');
 }
 
-function namesFromTable(table: HTMLElement): string[] {
+function namesFromTable(table: HTMLElement): HTMLElement[] {
   const headers = table.querySelectorAll('th').map(h => h.text.replace('\n', ''));
   const columnNumber = nameIndex(headers) + 1;
   if (columnNumber === 0) throw new Error(`No name in ${headers}`);
-  const cells = table.querySelectorAll(`td:nth-child(${columnNumber})`);
-  const names = cells.map(cleanElementText);
-  // console.log('from table', names);
-  return names;
+
+  return table.querySelectorAll(`td:nth-child(${columnNumber})`);
 }
 
 // Return the index of the first of `headers` that is a name column header or -1
@@ -166,8 +164,8 @@ function any<T>(array: Array<T>):T { return array[Math.floor(array.length * Math
 
 function cleanElementText(element: HTMLElement): string {
   return element.text
+    .replace(/\n/g, '')
     .replace(/^\s+/, '')
-    .replace(/\n/, '')
     .replace(/\s*[([,].*/, '');
 }
 
