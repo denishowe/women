@@ -1,20 +1,41 @@
-import fetch from 'node-fetch';
+import * as child_process from 'child_process'; import fetch from 'node-fetch';
 import { parse, HTMLElement } from 'node-html-parser';
+
+// "Lists of women" that aren't
+
+const badPages = new Set([
+  'all-female_bands',
+  'incidents_of_violence_against_women',
+  'montes_on_Venus',
+  'women%27s_association_football_clubs_in_England',
+  'women%27s_conferences',
+  'women%27s_organizations',
+  'women%27s_wrestling_promotions_in_the_United_States',
+]);
 
 export async function women(): Promise<void> {
   const page: HTMLElement = await fetchSomeListPage();
   cleanPage(page);
-  const names = firstFullList(page)
-    .map(cleanElementText)
+  let names = firstFullList(page)
+    .map(cleanElementText);
+  names = names.map(n => splitAtAnd(n)).flat()
     .filter(okName);
-  console.log(names.length, 'names', names);
+  console.log(names.length, 'names');
+  names.map(n => console.log(n));
+  const name = any(names);
+  console.log(name);
+  const googleImageUrl = 'https://www.google.com/search?tbm=isch&tbs=isz:l&q=';
+  const url = googleImageUrl + name;
+  console.log(url);
+  open(url);
 }
 
 async function fetchSomeListPage(): Promise<HTMLElement> {
-  // const path = '/wiki/List_of_consorts_of_Bremen-Verden'; // listItemAnchor
-  // const path = '/wiki/List_of_Norwegian_consorts'; // tableDataAnchor
-  const path = '/wiki/List_of_Lebanese_women_writers';
-  // const path = await fetchRandomPath();
+  // const path = '/wiki/List_of_Norwegian_consorts'; // tableDataAnchor - 1 column
+  // const path = '/wiki/List_of_Lebanese_women_writers'; // listItemAnchor
+  // const path = '/wiki/List_of_Playboy_Playmates_of_the_Month'; // table - years x months
+  // const path = '/wiki/List_of_Playboy_Playmates_of_2017'; // infoboxes
+  const path = await fetchRandomPath();
   const html = await fetchWikiPathHtml(path);
   // console.log(html);
 
@@ -26,7 +47,7 @@ async function fetchSomeListPage(): Promise<HTMLElement> {
 function firstFullList(page: HTMLElement): HTMLElement[] {
   for (let f of [listItemAnchor, tableDataAnchor]) {
     const result = f.call(0, page);
-    // console.log(f.name, '-->', result.length);
+    console.log(f.name, '-->', result.length);
     if (result.length) return result;
   }
   return [];
@@ -43,8 +64,10 @@ async function fetchRandomPath(): Promise<string> {
     return any(paths);
 }
 
+function wikiPath2Url(path: string): string { return `https://en.wikipedia.org${path}` }
+
 async function fetchWikiPathHtml(path: string): Promise<string> {
-  const url = `https://en.wikipedia.org${path}`;
+  const url = wikiPath2Url(path);
   console.log(url);
   const response = await fetch(url);
   return response.text();
@@ -52,17 +75,9 @@ async function fetchWikiPathHtml(path: string): Promise<string> {
 
 function isListUrl(url: string) { return /\/wiki\/List_of_[^"]+/.test(url) }
 
-// "Lists of women" that aren't
+function page2List(page: string): string { return page.replace('/wiki/List_of_', '') }
 
-const badPages = new Set([
-  '/wiki/List_of_incidents_of_violence_against_women',
-  '/wiki/List_of_women%27s_association_football_clubs_in_England',
-  '/wiki/List_of_women%27s_conferences',
-  '/wiki/List_of_women%27s_organizations',
-  '/wiki/List_of_women%27s_wrestling_promotions_in_the_United_States',
-]);
-
-function okPage(page: string): boolean { return ! badPages.has(page) }
+function okPage(page: string): boolean { return ! badPages.has(page2List(page)) }
 
 // Extract Names ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -77,7 +92,8 @@ function okPage(page: string): boolean { return ! badPages.has(page) }
  */
 
 function tableDataAnchor(page: HTMLElement): HTMLElement[] {
-  return page.querySelectorAll('table').map(namesFromTable).flat();
+  return page.querySelectorAll('table')
+    .map(namesFromTable).flat();
 }
 
 /** ul li <a>NAME</a>
@@ -132,25 +148,36 @@ function removeFromSeeAlsoOn(page: HTMLElement): void {
   let el: HTMLElement = h2s.filter(isFooter)?.[0];
   while (el) {
     const next = el.nextElementSibling;
-    // console.log('Remove', el.text);
     el.remove();
     el = next;
   }
 }
 
 function isFooter(element: HTMLElement): boolean {
-  return !! element.querySelector('span#See_also, span#Notes');
+  return !! element.querySelector('span#See_also, span#Notes, span#References');
 }
 
 function namesFromTable(table: HTMLElement): HTMLElement[] {
-  const headers = table.querySelectorAll('th').map(h => h.text.replace('\n', ''));
-  const columnNumber = nameIndex(headers) + 1;
-  if (columnNumber === 0) throw new Error(`No name in ${headers}`);
-
-  return table.querySelectorAll(`td:nth-child(${columnNumber})`);
+  const selector = getSelector(table);
+  return table.querySelectorAll(selector);
 }
 
-// Return the index of the first of `headers` that is a name column header or -1
+function getSelector(table: HTMLElement): string {
+  if (table.classNames.includes('infobox')) return 'tr:nth-child(1) th';
+
+  const headers = table.querySelectorAll('th').map(h => h.text.replace('\n', ''));
+
+  // /List_of_Playboy_Playmates_of_the_Month has tables of year vs month/season with names in all <td>s
+  if (headers.includes('January') || headers.includes('Winter'))
+    return 'td';
+
+  const columnNumber = nameIndex(headers) + 1;
+  if (columnNumber) return `td:nth-child(${columnNumber})`;
+
+  throw new Error(`No names in ${table}`);
+}
+
+// Return the index of the first of `headers` that is a name column header, else -1
 
 const nameHeaders = ['Name', 'Player', 'Actress'];
 
@@ -169,7 +196,21 @@ function cleanElementText(element: HTMLElement): string {
     .replace(/\s*[([,].*/, '');
 }
 
-function okName(name: string) { return name.length > 3 }
+// Split text like "Mara Corday and Pat Sheehan" at the
+// "and" if the strings on either side both contain spaces
+
+function splitAtAnd(s: string): string[] {
+  const m = s.match(/(\S+\s.+)\s+(?:and|&)\s+(\S+\s.+)/);
+  return m ? m.slice(1) : [s];
+}
+
+function okName(name: string) {
+  return name.length > 3 && name !== 'magazine was not published'
+}
+
+function open(url: string): void {
+  child_process.spawn('start', ['""', `"${url}"`], { shell: true })
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
