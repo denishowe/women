@@ -7,54 +7,62 @@ const badPages = new Set([
   'all-female_bands',
   'incidents_of_violence_against_women',
   'montes_on_Venus',
+  'the_verified_oldest_people#100_verified_oldest_women',
   'women%27s_association_football_clubs_in_England',
   'women%27s_conferences',
   'women%27s_organizations',
   'women%27s_wrestling_promotions_in_the_United_States',
 ]);
 
+const googleImageUrl = 'https://www.google.com/search?tbm=isch&tbs=isz:l&q=';
+
 export async function women(): Promise<void> {
-  const page: HTMLElement = await fetchSomeListPage();
+  const listPath = await randomPath();
+  console.log(listPath);
+  const listUrl: string = wikiPath2Url(listPath);
+  open(listUrl);
+  const page: HTMLElement = await listPage(listPath);
   cleanPage(page);
-  let names = firstFullList(page)
-    .map(cleanElementText);
-  names = names.map(n => splitAtAnd(n)).flat()
-    .filter(okName);
+  let names = firstFullList(page);
   console.log(names.length, 'names');
-  names.map(n => console.log(n));
+  // names.map(n => console.log(n));
   const name = any(names);
   console.log(name);
-  const googleImageUrl = 'https://www.google.com/search?tbm=isch&tbs=isz:l&q=';
-  const url = googleImageUrl + name;
+  const quotedName = `%22${name}%22`;
+  const url = googleImageUrl + quotedName;
   console.log(url);
   open(url);
 }
 
-async function fetchSomeListPage(): Promise<HTMLElement> {
-  // const path = '/wiki/List_of_Norwegian_consorts'; // tableDataAnchor - 1 column
-  // const path = '/wiki/List_of_Lebanese_women_writers'; // listItemAnchor
-  // const path = '/wiki/List_of_Playboy_Playmates_of_the_Month'; // table - years x months
-  // const path = '/wiki/List_of_Playboy_Playmates_of_2017'; // infoboxes
-  const path = await fetchRandomPath();
-  const html = await fetchWikiPathHtml(path);
-  // console.log(html);
+async function listPage(path: string): Promise<HTMLElement> {
+  const url = wikiPath2Url(path);
+  const html = await wikiUrlHtml(url);
 
   return parse(html);
 }
 
 /** Return the first non-empty list resulting from applying one of the `functions` to `args` else [] */
 
-function firstFullList(page: HTMLElement): HTMLElement[] {
+function firstFullList(page: HTMLElement): string[] {
   for (let f of [listItemAnchor, tableDataAnchor]) {
-    const result = f.call(0, page);
-    console.log(f.name, '-->', result.length);
-    if (result.length) return result;
+    const raw = f.call(0, page);
+    console.log(f.name, '--> raw', raw.length);
+    const clean = raw.map(cleanElementText)
+      .map(n => splitAtAnd(n)).flat()
+      .filter(okName);
+    console.log(f.name, '--> clean', clean.length);
+    if (clean.length) return clean;
   }
-  return [];
+  throw new Error(`No names in ${page.text}`);
 }
 
-async function fetchRandomPath(): Promise<string> {
-  const rootHtml = await fetchWikiPathHtml('/wiki/Lists_of_women');
+async function randomPath(): Promise<string> {
+  // const path = '/wiki/List_of_Norwegian_consorts'; // tableDataAnchor - 1 column
+  // const path = '/wiki/List_of_Lebanese_women_writers'; // listItemAnchor
+  // const path = '/wiki/List_of_Playboy_Playmates_of_the_Month'; // table - years x months
+  // const path = '/wiki/List_of_Playboy_Playmates_of_2017'; // infoboxes
+  const url = wikiPath2Url('/wiki/Lists_of_women');
+  const rootHtml = await wikiUrlHtml(url);
   const root = parse(rootHtml);
   const paths = root.querySelectorAll('a')
     .map(el => el.attributes.href)
@@ -66,8 +74,7 @@ async function fetchRandomPath(): Promise<string> {
 
 function wikiPath2Url(path: string): string { return `https://en.wikipedia.org${path}` }
 
-async function fetchWikiPathHtml(path: string): Promise<string> {
-  const url = wikiPath2Url(path);
+async function wikiUrlHtml(url: string): Promise<string> {
   console.log(url);
   const response = await fetch(url);
   return response.text();
