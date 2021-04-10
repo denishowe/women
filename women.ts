@@ -1,7 +1,68 @@
+import fs from 'fs';
 import * as child_process from 'child_process'; import fetch from 'node-fetch';
 import { parse, HTMLElement } from 'node-html-parser';
 
-// "Lists of women" that aren't
+export async function women(): Promise<void> {
+  while (true) await woman();
+}
+
+async function woman(): Promise<void> {
+  const listPath = await randomPath();
+  // const listPath = '/wiki/List_of_Parmese_consorts';
+  const listUrl: string = wikiPath2Url(listPath);
+  open(listUrl);
+  const page: HTMLElement = await pathPage(listPath);
+  cleanPage(page);
+  let names = firstFullList(page);
+  const name = any(names);
+  console.log(name);
+  const url = nameUrl(name);
+  console.log(url);
+  open(url);
+  await pause();
+}
+
+async function pathPage(path: string): Promise<HTMLElement> { return wikiUrlPage(wikiPath2Url(path)) }
+
+const wikiUrl = 'https://en.wikipedia.org';
+
+function wikiPath2Url(path: string): string { return wikiUrl + path }
+
+const googleImageUrl = 'https://www.google.com/search?tbm=isch&tbs=isz:l&q=';
+
+function nameUrl(name: string): string {
+  const quotedName = `%22${name}%22`;
+  return googleImageUrl + quotedName;
+}
+
+/** Return the first non-empty list resulting from applying one of the `functions` to `args` else [] */
+
+function firstFullList(page: HTMLElement): string[] {
+  for (let f of [listItemAnchor, tableDataAnchor]) {
+    const raw = f.call(0, page);
+    const clean = raw.map(cleanElementText)
+      .map(n => splitAtAnd(n)).flat()
+      .filter(okName);
+    console.log(f.name, '--> ', clean.length);
+    if (clean.length) return clean;
+  }
+  throw new Error(`No names in ${page.text}`);
+}
+
+async function randomPath(): Promise<string> {
+  const root = await pathPage('/wiki/Lists_of_women');
+  const paths = root.querySelectorAll('a')
+    .map(el => el.attributes.href)
+    .filter(isListOfWomenPage);
+
+    return any(paths);
+}
+
+// Some "Lists of women" aren't
+
+function isListOfWomenPage(page: string): boolean {
+  return /\/wiki\/List_of_[^"]+/.test(page) && ! badPages.has(page2List(page));
+}
 
 const badPages = new Set([
   'all-female_bands',
@@ -14,77 +75,15 @@ const badPages = new Set([
   'women%27s_wrestling_promotions_in_the_United_States',
 ]);
 
-const googleImageUrl = 'https://www.google.com/search?tbm=isch&tbs=isz:l&q=';
-
-export async function women(): Promise<void> {
-  const listPath = await randomPath();
-  console.log(listPath);
-  const listUrl: string = wikiPath2Url(listPath);
-  open(listUrl);
-  const page: HTMLElement = await listPage(listPath);
-  cleanPage(page);
-  let names = firstFullList(page);
-  console.log(names.length, 'names');
-  // names.map(n => console.log(n));
-  const name = any(names);
-  console.log(name);
-  const quotedName = `%22${name}%22`;
-  const url = googleImageUrl + quotedName;
+async function wikiUrlPage(url: string): Promise<HTMLElement> {
   console.log(url);
-  open(url);
-}
-
-async function listPage(path: string): Promise<HTMLElement> {
-  const url = wikiPath2Url(path);
-  const html = await wikiUrlHtml(url);
+  const response = await fetch(url);
+  const html = await response.text();
 
   return parse(html);
 }
 
-/** Return the first non-empty list resulting from applying one of the `functions` to `args` else [] */
-
-function firstFullList(page: HTMLElement): string[] {
-  for (let f of [listItemAnchor, tableDataAnchor]) {
-    const raw = f.call(0, page);
-    console.log(f.name, '--> raw', raw.length);
-    const clean = raw.map(cleanElementText)
-      .map(n => splitAtAnd(n)).flat()
-      .filter(okName);
-    console.log(f.name, '--> clean', clean.length);
-    if (clean.length) return clean;
-  }
-  throw new Error(`No names in ${page.text}`);
-}
-
-async function randomPath(): Promise<string> {
-  // const path = '/wiki/List_of_Norwegian_consorts'; // tableDataAnchor - 1 column
-  // const path = '/wiki/List_of_Lebanese_women_writers'; // listItemAnchor
-  // const path = '/wiki/List_of_Playboy_Playmates_of_the_Month'; // table - years x months
-  // const path = '/wiki/List_of_Playboy_Playmates_of_2017'; // infoboxes
-  const url = wikiPath2Url('/wiki/Lists_of_women');
-  const rootHtml = await wikiUrlHtml(url);
-  const root = parse(rootHtml);
-  const paths = root.querySelectorAll('a')
-    .map(el => el.attributes.href)
-    .filter(isListUrl)
-    .filter(okPage);
-
-    return any(paths);
-}
-
-function wikiPath2Url(path: string): string { return `https://en.wikipedia.org${path}` }
-
-async function wikiUrlHtml(url: string): Promise<string> {
-  console.log(url);
-  const response = await fetch(url);
-  return response.text();
-}
-
-function isListUrl(url: string) { return /\/wiki\/List_of_[^"]+/.test(url) }
-
 function page2List(page: string): string { return page.replace('/wiki/List_of_', '') }
-
-function okPage(page: string): boolean { return ! badPages.has(page2List(page)) }
 
 // Extract Names ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -132,8 +131,10 @@ function listItemAnchor(content: HTMLElement): HTMLElement[] {
 function cleanPage(content: HTMLElement) {
   [
     '.catlinks',
+    '.external',
     '.mw-footer',
     '.navbox',
+    '.sidebar',
     '.toc',
     '.vector-menu-content-list',
     // '.tocright',
@@ -217,6 +218,12 @@ function okName(name: string) {
 
 function open(url: string): void {
   child_process.spawn('start', ['""', `"${url}"`], { shell: true })
+}
+
+async function pause() {
+  process.stdout.write('Hit Enter to continue: ');
+  const buffer = Buffer.alloc(1024);
+  fs.readSync(process.stdin.fd, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
