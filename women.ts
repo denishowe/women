@@ -6,9 +6,21 @@ export async function women(): Promise<void> {
   while (true) await woman();
 }
 
+const badPageREs = [
+  /bands/,
+  /conferences/,
+  /football_clubs/,
+  /football_teams/,
+  /incidents/,
+  /montes_on_Venus/,
+  /oldest_people/,
+  /organizations/,
+  /promotions/,
+];
+
 async function woman(): Promise<void> {
   const listPath = await randomPath();
-  // const listPath = '/wiki/List_of_Parmese_consorts';
+  // const listPath = '/wiki/List_of_France_women%27s_international_footballers';
   const listUrl: string = wikiPath2Url(listPath);
   open(listUrl);
   const page: HTMLElement = await pathPage(listPath);
@@ -22,7 +34,14 @@ async function woman(): Promise<void> {
   await pause();
 }
 
-async function pathPage(path: string): Promise<HTMLElement> { return wikiUrlPage(wikiPath2Url(path)) }
+async function pathPage(path: string): Promise<HTMLElement> {
+  const url = wikiPath2Url(path);
+  console.log(url);
+  const response = await fetch(url);
+  const html = await response.text();
+
+  return parse(html);
+}
 
 const wikiUrl = 'https://en.wikipedia.org';
 
@@ -39,90 +58,43 @@ function nameUrl(name: string): string {
 
 function firstFullList(page: HTMLElement): string[] {
   for (let f of [listItemAnchor, tableDataAnchor]) {
-    const raw = f.call(0, page);
-    const clean = raw.map(cleanElementText)
+    const rawElements: HTMLElement[] = f.call(0, page);
+    const names: string[] = rawElements.map(cleanElementText)
       .map(n => splitAtAnd(n)).flat()
       .filter(okName);
-    console.log(f.name, '--> ', clean.length);
-    if (clean.length) return clean;
+    if (names.length) return names;
   }
-  throw new Error(`No names in ${page.text}`);
+  return []; // todo throw new Error(`No names in ${page.text}`);
 }
 
 async function randomPath(): Promise<string> {
   const root = await pathPage('/wiki/Lists_of_women');
   const paths = root.querySelectorAll('a')
     .map(el => el.attributes.href)
-    .filter(isListOfWomenPage);
+    .filter(isListOfWomenPath);
 
     return any(paths);
 }
 
-// Some "Lists of women" aren't
+// Some "Lists of women" are actaully lists of clubs, etc.
 
-function isListOfWomenPage(page: string): boolean {
-  return /\/wiki\/List_of_[^"]+/.test(page) && ! badPages.has(page2List(page));
-}
-
-const badPages = new Set([
-  'all-female_bands',
-  'incidents_of_violence_against_women',
-  'montes_on_Venus',
-  'the_verified_oldest_people#100_verified_oldest_women',
-  'women%27s_association_football_clubs_in_England',
-  'women%27s_conferences',
-  'women%27s_organizations',
-  'women%27s_wrestling_promotions_in_the_United_States',
-]);
-
-async function wikiUrlPage(url: string): Promise<HTMLElement> {
-  console.log(url);
-  const response = await fetch(url);
-  const html = await response.text();
-
-  return parse(html);
-}
-
-function page2List(page: string): string { return page.replace('/wiki/List_of_', '') }
+function isListOfWomenPath(path: string): boolean { return ! badPageREs.some(re => re.test(path)) }
 
 // Extract Names ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** td(th = Name/Actress/Player) <a>NAME</a>
- * https://en.wikipedia.org/wiki/List_of_Aquitanian_consorts
- * https://en.wikipedia.org/wiki/List_of_Best_Actress_winners_by_age
- * https://en.wikipedia.org/wiki/List_of_female_archivists
- * https://en.wikipedia.org/wiki/List_of_female_boxers
- * https://en.wikipedia.org/wiki/List_of_Polish_consorts
- * https://en.wikipedia.org/wiki/List_of_royal_consorts_of_Transylvania
- * https://en.wikipedia.org/wiki/List_of_Women%27s_National_Basketball_Association_season_rebounding_leaders
- */
+// td(th = Name/Actress/Player) <a>NAME</a>
 
 function tableDataAnchor(page: HTMLElement): HTMLElement[] {
-  return page.querySelectorAll('table')
-    .map(namesFromTable).flat();
+  const tables = page.querySelectorAll('table');
+
+  return tables.map(namesFromTable).flat();
 }
 
-/** ul li <a>NAME</a>
- * Remove "(...)" after name
- * https://en.wikipedia.org/wiki/List_of_Chinese_women_artists
- * https://en.wikipedia.org/wiki/List_of_classic_female_blues_singers
- * https://en.wikipedia.org/wiki/List_of_female_composers_by_birth_date
- * https://en.wikipedia.org/wiki/List_of_Filipino_women_artists
- * https://en.wikipedia.org/wiki/List_of_Tunisian_women_writers
- */
+// ul li <a>NAME</a>
 
 function listItemAnchor(content: HTMLElement): HTMLElement[] {
   return content.querySelectorAll('li a:first-of-type');
 }
-
-// p <b>NAME</b> (born
-// also
-// table(class="infobox vcard") <th>NAME</th>
-//  https://en.wikipedia.org/wiki/List_of_Playboy_Playmates_of_1961
-//  https://en.wikipedia.org/wiki/List_of_Playboy_Playmates_of_2006
-
-// table <td>NAME<br> all except 1st (year) column
-// https://en.wikipedia.org/wiki/List_of_Miss_International_runners-up_and_finalists
 
 // Miscellaneous ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -145,7 +117,6 @@ function cleanPage(content: HTMLElement) {
 
 function removeAll(content: HTMLElement, selector: string): void {
   const els = content.querySelectorAll(selector);
-  // console.log(els.length, 'matches for', selector);
   els ?. map(el => el.remove());
 }
 
@@ -165,29 +136,42 @@ function isFooter(element: HTMLElement): boolean {
   return !! element.querySelector('span#See_also, span#Notes, span#References');
 }
 
+// Return any elements in `table` that are names
+
 function namesFromTable(table: HTMLElement): HTMLElement[] {
-  const selector = getSelector(table);
-  return table.querySelectorAll(selector);
+  const selector = getSelectorForTable(table);
+
+  return selector ? table.querySelectorAll(selector) : [];
 }
 
-function getSelector(table: HTMLElement): string {
+// Return a CSS selector to extract name elements from `table` or undefined
+
+function getSelectorForTable(table: HTMLElement): string | undefined {
   if (table.classNames.includes('infobox')) return 'tr:nth-child(1) th';
 
   const headers = table.querySelectorAll('th').map(h => h.text.replace('\n', ''));
 
-  // /List_of_Playboy_Playmates_of_the_Month has tables of year vs month/season with names in all <td>s
+  // /List_of_Playboy_Playmates_of_the_Month has tables
+  // of year vs month/season with names in all <td>s
+
   if (headers.includes('January') || headers.includes('Winter'))
     return 'td';
 
-  const columnNumber = nameIndex(headers) + 1;
-  if (columnNumber) return `td:nth-child(${columnNumber})`;
+  // List_of_France_women's_international_footballers
+  // has names in <th><span><span><span><a>
 
-  throw new Error(`No names in ${table}`);
+  const cellTag = table.querySelector('tr:nth-child(2) th') ? 'th' : 'td';
+
+  const columnIndex = nameIndex(headers);
+  if (columnIndex < 0) return undefined;
+
+  // :nth-child(n) counts from n = 1
+  return `${cellTag}:nth-child(${columnIndex + 1})`;
 }
 
-// Return the index of the first of `headers` that is a name column header, else -1
-
 const nameHeaders = ['Name', 'Player', 'Actress'];
+
+// Return the index of the first of `headers` that is a name column header, else -1
 
 function nameIndex(headers: string[]): number {
   return headers.findIndex(h => nameHeaders.includes(h));
