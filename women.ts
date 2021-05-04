@@ -9,6 +9,7 @@ export async function women(): Promise<void> {
 const badPageREs = [
   /bands/,
   /conferences/,
+  /editions/,
   /football_clubs/,
   /football_teams/,
   /incidents/,
@@ -20,11 +21,11 @@ const badPageREs = [
 
 async function woman(): Promise<void> {
   const listPath = await randomPath();
-  // const listPath = '/wiki/List_of_France_women%27s_international_footballers';
+  // const listPath = '/wiki/Miss_International_2021';
   const listUrl: string = wikiPath2Url(listPath);
   open(listUrl);
   const page: HTMLElement = await pathPage(listPath);
-  cleanPage(page);
+  removeElements(page);
   let names = firstFullList(page);
   const name = any(names);
   console.log(name);
@@ -59,6 +60,7 @@ function nameUrl(name: string): string {
 function firstFullList(page: HTMLElement): string[] {
   for (let f of [listItemAnchor, tableDataAnchor]) {
     const rawElements: HTMLElement[] = f.call(0, page);
+    // console.log(f, '-->', rawElements.map(e => e.text));
     const names: string[] = rawElements.map(cleanElementText)
       .map(n => splitAtAnd(n)).flat()
       .filter(okName);
@@ -100,18 +102,19 @@ function listItemAnchor(content: HTMLElement): HTMLElement[] {
 
 /** Remove unwanted elements and everything from See_also on */
 
-function cleanPage(content: HTMLElement) {
+function removeElements(content: HTMLElement) {
   [
     '.catlinks',
     '.external',
+    '.infobox',   // E.g. Miss_International_2021
     '.mw-footer',
     '.navbox',
+    '.relist',
     '.sidebar',
     '.toc',
     '.vector-menu-content-list',
     // '.tocright',
-  ]
-    .forEach(selector => removeAll(content, selector));
+  ].forEach(selector => removeAll(content, selector));
   removeFromSeeAlsoOn(content);
 }
 
@@ -157,19 +160,20 @@ function getSelectorForTable(table: HTMLElement): string | undefined {
   if (headers.includes('January') || headers.includes('Winter'))
     return 'td';
 
-  // List_of_France_women's_international_footballers
-  // has names in <th><span><span><span><a>
+  // List_of_France_women's_international_footballers non-
+  // header rows have names in <th><span><span><span><a>
 
   const cellTag = table.querySelector('tr:nth-child(2) th') ? 'th' : 'td';
 
   const columnIndex = nameIndex(headers);
+  // console.log('tag', cellTag, 'col ind', columnIndex);
   if (columnIndex < 0) return undefined;
 
   // :nth-child(n) counts from n = 1
   return `${cellTag}:nth-child(${columnIndex + 1})`;
 }
 
-const nameHeaders = ['Name', 'Player', 'Actress'];
+const nameHeaders = ['Name', 'Player', 'Actress', 'Delegate'];
 
 // Return the index of the first of `headers` that is a name column header, else -1
 

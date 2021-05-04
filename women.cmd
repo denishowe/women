@@ -1,2 +1,2 @@
 @cd %~dp0
-@call ts-node women.ts
+@call node_modules\.bin\ts-node women.ts
