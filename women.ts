@@ -21,16 +21,16 @@ const badPageREs = [
 
 async function woman(): Promise<void> {
   const listPath = await randomPath();
-  // const listPath = '/wiki/Miss_International_2021';
+  // const listPath = '/wiki/List_of_Playboy_Playmates_of_1983';
   const listUrl: string = wikiPath2Url(listPath);
   open(listUrl);
   const page: HTMLElement = await pathPage(listPath);
   removeElements(page);
   let names = firstFullList(page);
+  if (!names.length) throw new Error('No names');
   const name = any(names);
   console.log(name);
   const url = nameUrl(name);
-  console.log(url);
   open(url);
   await pause();
 }
@@ -58,9 +58,8 @@ function nameUrl(name: string): string {
 /** Return the first non-empty list resulting from applying one of the `functions` to `args` else [] */
 
 function firstFullList(page: HTMLElement): string[] {
-  for (let f of [listItemAnchor, tableDataAnchor]) {
+  for (let f of [listItemAnchor, tableDataAnchor, monthParagraph]) {
     const rawElements: HTMLElement[] = f.call(0, page);
-    // console.log(f, '-->', rawElements.map(e => e.text));
     const names: string[] = rawElements.map(cleanElementText)
       .map(n => splitAtAnd(n)).flat()
       .filter(okName);
@@ -98,9 +97,26 @@ function listItemAnchor(content: HTMLElement): HTMLElement[] {
   return content.querySelectorAll('li a:first-of-type');
 }
 
+// h2 span January
+// table (deleted)
+// p b NAME
+// https://en.wikipedia.org/wiki/List_of_Playboy_Playmates_of_1983
+
+function monthParagraph(page: HTMLElement): HTMLElement[] {
+  const elements: HTMLElement[] = [];
+  page.querySelectorAll('h2').forEach(h2 => {
+    const spanText = h2.querySelector('span')?.text;
+    if (!isMonthName(spanText)) return;
+    const bold = h2.nextElementSibling.firstChild;
+    if (!bold.text) return;
+    elements.push(bold as HTMLElement);
+  });
+  return elements;
+}
+
 // Miscellaneous ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** Remove unwanted elements and everything from See_also on */
+/** Remove unwanted elements */
 
 function removeElements(content: HTMLElement) {
   [
@@ -115,7 +131,8 @@ function removeElements(content: HTMLElement) {
     '.vector-menu-content-list',
     // '.tocright',
   ].forEach(selector => removeAll(content, selector));
-  removeFromSeeAlsoOn(content);
+  removeFromFooterOn(content);
+  removeSectionsWithH2(content, 'span#Judges, span#Results, span#Special_awards');
 }
 
 function removeAll(content: HTMLElement, selector: string): void {
@@ -123,11 +140,11 @@ function removeAll(content: HTMLElement, selector: string): void {
   els ?. map(el => el.remove());
 }
 
-// Given an element, remove an h2 with child span#See_also and all later siblings of the h2
+// In `element`, remove the first footer h2 and all following siblings
 
-function removeFromSeeAlsoOn(page: HTMLElement): void {
-  const h2s = page.querySelectorAll('h2');
-  let el: HTMLElement = h2s.filter(isFooter)?.[0];
+function removeFromFooterOn(element: HTMLElement): void {
+  const h2s = h2sWithChildMatching(element, 'span#See_also, span#Notes, span#References')
+  let el: HTMLElement = h2s?.[0];
   while (el) {
     const next = el.nextElementSibling;
     el.remove();
@@ -135,8 +152,27 @@ function removeFromSeeAlsoOn(page: HTMLElement): void {
   }
 }
 
-function isFooter(element: HTMLElement): boolean {
-  return !! element.querySelector('span#See_also, span#Notes, span#References');
+/** Remove <h2>s that have a child matching `childSelector` and the h2's next sibling */
+
+ function removeSectionsWithH2(element: HTMLElement, childSelector: string): void {
+  h2sWithChildMatching(element, childSelector).forEach(heading => {
+    heading.nextElementSibling.remove();
+    heading.remove();
+  });
+}
+
+/** From `element`, return <h2>s that have a child matching `childSelector` */
+
+function h2sWithChildMatching(element: HTMLElement, childSelector: string): HTMLElement[] {
+  return parentsWithChildMatching(element, 'h2', childSelector);
+}
+
+/** From `element`, return elements matching `parentSelector`
+ * that have a child matching `childSelector` */
+
+function parentsWithChildMatching(element: HTMLElement, parentSelector: string, childSelector: string): HTMLElement[] {
+  return element.querySelectorAll(parentSelector)
+    .filter(el => el.querySelector(childSelector));
 }
 
 // Return any elements in `table` that are names
@@ -166,19 +202,31 @@ function getSelectorForTable(table: HTMLElement): string | undefined {
   const cellTag = table.querySelector('tr:nth-child(2) th') ? 'th' : 'td';
 
   const columnIndex = nameIndex(headers);
-  // console.log('tag', cellTag, 'col ind', columnIndex);
   if (columnIndex < 0) return undefined;
 
   // :nth-child(n) counts from n = 1
   return `${cellTag}:nth-child(${columnIndex + 1})`;
 }
 
-const nameHeaders = ['Name', 'Player', 'Actress', 'Delegate'];
+const nameHeaders = ['Name', 'Player', 'Actress', 'Delegate', 'Contestant'];
 
 // Return the index of the first of `headers` that is a name column header, else -1
 
 function nameIndex(headers: string[]): number {
-  return headers.findIndex(h => nameHeaders.includes(h));
+  return badTable(headers) ? -1 : headerIndex(headers, nameHeaders);
+}
+
+// Headers found in tables we should ignore
+// Ignore /Miss_International_2014 tables Results, Special awards
+
+const badTableHeaders = ['Final results', 'Award'];
+
+function badTable(headers: string[]) { return headerIndex(headers, badTableHeaders) !== -1 }
+
+// Return the index of the first of `headers` found in `wanted`, else -1
+
+function headerIndex(headers: string[], wanted: string[]) {
+  return headers.findIndex(h => wanted.includes(h));
 }
 
 function any<T>(array: Array<T>):T { return array[Math.floor(array.length * Math.random())] };
@@ -213,6 +261,10 @@ async function pause() {
   const buffer = Buffer.alloc(1024);
   fs.readSync(process.stdin.fd, buffer);
 }
+
+const monthNames = 'January February March April May June July August September October November December'.split(' ');
+
+function isMonthName(s: string): boolean { return monthNames.includes(s) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
