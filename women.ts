@@ -264,7 +264,7 @@ async function pause() {
 
 const monthNames = 'January February March April May June July August September October November December'.split(' ');
 
-function isMonthName(s: string): boolean { return monthNames.includes(s) }
+function isMonthName(s: string | undefined): boolean { return !!s && monthNames.includes(s) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
