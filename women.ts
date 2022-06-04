@@ -1,5 +1,6 @@
 import fs from 'fs';
-import * as child_process from 'child_process'; import fetch from 'node-fetch';
+import * as child_process from 'child_process';
+import fetch from 'node-fetch';
 import { parse, HTMLElement } from 'node-html-parser';
 
 export async function women(): Promise<void> {
