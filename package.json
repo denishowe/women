@@ -2,6 +2,7 @@
   "name": "women",
   "version": "1.0.0",
   "description": "Crawl for women",
+  "type": "module",
   "main": "women.ts",
   "scripts": {
     "start": "nodemon --ext ts --exec \"tput reset& npm run once\"",
@@ -16,8 +17,8 @@
     "nodemon": "^2.0.14"
   },
   "dependencies": {
-    "node-fetch": "^3.1.1",
+    "node-fetch": "^3.2.5",
     "node-html-parser": "^5.0.0",
-    "ts-node": "^9.1.1"
+    "ts-node": "^10.8.1"
   }
 }

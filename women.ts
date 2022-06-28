@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { readSync } from 'fs';
 import * as child_process from 'child_process';
 import fetch from 'node-fetch';
 import { parse, HTMLElement } from 'node-html-parser';
@@ -260,7 +260,7 @@ function open(url: string): void {
 async function pause() {
   process.stdout.write('Hit Enter to continue: ');
   const buffer = Buffer.alloc(1024);
-  fs.readSync(process.stdin.fd, buffer);
+  readSync(process.stdin.fd, buffer);
 }
 
 const monthNames = 'January February March April May June July August September October November December'.split(' ');
