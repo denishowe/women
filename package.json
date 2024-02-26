@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Crawl for women",
   "type": "module",
-  "main": "women.ts",
+  "main": "index.ts",
   "scripts": {
     "start": "nodemon --ext ts --exec \"tput reset& npm run once\"",
-    "once": "ts-node women.ts",
+    "once": "node --loader ts-node/esm --no-warnings=ExperimentalWarning index.ts",
     "test": "jest ."
   },
   "author": "Denis Howe",

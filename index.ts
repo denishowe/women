@@ -21,8 +21,8 @@ const badPageREs = [
 ];
 
 async function woman(): Promise<void> {
-  const listPath = await randomPath();
-  // const listPath = '/wiki/List_of_Playboy_Playmates_of_1983';
+  // const listPath = await randomPath();
+  const listPath = '/wiki/The_Price_Is_Right_models';
   const listUrl: string = wikiPath2Url(listPath);
   open(listUrl);
   const page: HTMLElement = await pathPage(listPath);
@@ -58,9 +58,11 @@ function nameUrl(name: string): string {
 
 /** Return the first non-empty list resulting from applying one of the `functions` to `args` else [] */
 
+const extractors = [listItemAnchor, tableDataAnchor, monthParagraph];
+
 function firstFullList(page: HTMLElement): string[] {
-  for (let f of [listItemAnchor, tableDataAnchor, monthParagraph]) {
-    const rawElements: HTMLElement[] = f.call(0, page);
+  for (let extract of extractors) {
+    const rawElements: HTMLElement[] = extract.call(0, page);
     const names: string[] = rawElements.map(cleanElementText)
       .map(n => splitAtAnd(n)).flat()
       .filter(okName);
